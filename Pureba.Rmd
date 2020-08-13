@@ -1,0 +1,278 @@
+---
+title: "Soluciones comentarios"
+author: "Ayala Flores Luis Gerardo"
+output:
+   pdf_document: default
+   html_document:
+    df_print: paged
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+mis.colores <- colorRampPalette(c("yellow", "red", "yellow"))
+muestra <- read.csv("datos/muestra.csv")[1]$muestra
+mu_hat<-mean(muestra)
+f_gorro<-ecdf(muestra)
+graficas_densidades<-function(){
+        hist(muestra,freq = F,col = mis.colores(14),xlab = "Muestra observada")
+        lines(density(muestra),lwd=3)
+        curve(dnorm(x),col="green",add = T,lwd = 3)
+        curve(dnorm(x,mu_hat,sd(muestra)),col="red",add = T,lwd = 3)
+        curve(dnorm(x,mu_hat,1),col="blue",add = T,lwd = 3)
+        curve(dnorm(x,mu_hat,sum(sd(muestra),1)/2),col="purple",add = T,lwd = 3)
+        legend(max(muestra)-3.5,0.35,c("Muestra","N(0,1)","N(mu_had,1)"
+                      ,"N(mu_had,sd(muestra))",
+                      "N(mu_hat,sum(sd(muestra)+1)/2)"),
+               col =c("black","green","red","blue","purple"),lty=1,lwd=2,cex=0.5)
+}
+graficas_distribuciones<-function(){
+        curve(f_gorro(x),col="yellow",-5,5,lwd=3)
+        curve(pnorm(x),col="green",add = T,lwd=2.5)
+        curve(pnorm(x,mu_hat,sd(muestra)),col="red",add = T,lwd=2.5)
+        curve(pnorm(x,mu_hat,1),col="blue",add = T,lwd=2.5)
+        curve(pnorm(x,mu_hat,sum(sd(muestra),1)/2),col="purple",add = T,lwd=2.5)
+        legend(min(muestra)-6,1,c("Muestra","N(0,1)","N(mu_had,1)",
+                 "N(mu_had,sd(muestra))",
+                 "N(mu_hat,sum(sd(muestra),1)/2)"),
+                 col =c("yellow","green","red","blue","purple"),lty=1,lwd=2,cex=.6)
+}
+prueba<-function(){
+        N_sdmustra<-goftest::ad.test(muestra, pnorm, mean =mu_hat, sd =sd(muestra))
+        N_1<-goftest::ad.test(muestra, pnorm, mean =mu_hat, sd =1)
+        N_1.088<-goftest::ad.test(muestra, pnorm, mean =mu_hat, sd =1.088)
+        Resultados<-list(Normal_Sdmuestra=N_sdmustra$p.value,Normal_1=N_1$p.value,
+                         Normal_1.088=N_1.088$p.value)
+        return(Resultados)
+}
+Bootparametrico<-function(datos,replicas=1000,confianza=.90){
+        set.seed(432)
+        mu_bp<-vector()
+        for (i in 1:replicas) {
+                mu_bp[i]<-mean(rnorm(length(datos),mu_hat,(sd(muestra)+1)/2))
+                
+        }
+        mu_bp_hat<-mean(mu_bp)
+        desviacion<-sd(mu_bp)
+        alpha<-1-confianza
+        vecpivotal<-c(mu_bp-mu_bp_hat)
+        nor<-mean(datos)+c(-qnorm((alpha)/2,lower.tail = F)*desviacion,
+                           qnorm((alpha)/2,lower.tail = F)*desviacion)
+        ampN<-nor[2]-nor[1]
+        resultados<-list(Estadistico = mu_hat,Estimacion = mu_bp_hat,
+                         Sd_hat_bp = desviacion ,
+                         min_max = range(mu_bp),
+                         Int.Normal = nor,
+                         Amplitud.Normal = ampN)
+        hist(mu_bp,freq = F,col = mis.colores(14),main = "Bootstrap Parametrico",
+             xlab = "mu_hat", border = mis.colores(14),lty="blank")
+        rug(mean(datos), lwd = 2)
+        rug(mu_bp_hat, lwd = 2, col = "blue")
+        abline(v = 2.5, lty = 2, col = "black", lwd = 2)
+        abline(v = nor[1],lty = 2, col = "Tomato", lwd = 2)
+        abline(v = nor[2],lty = 2, col = "Tomato", lwd = 2)
+        lines(density(mu_bp),lwd=3,col="blue")
+        curve(dnorm(x,mu_hat,1.088665/sqrt(length(datos))),add = T,lwd = 3)
+        legend(min(mu_bp)-.025,3.5,col = c("Tomato",
+                         "Black"),legend = c("Int.Normal","Mu real"),
+                           lty =2,lwd = 2, cex=0.7)
+        
+        return(resultados)
+}
+Parametrico<-Bootparametrico(muestra)
+Bootnoparametrico<-function(datos,replicas=1000,confianza=.90){
+        set.seed(432)
+        mu_bnp<-vector()
+        for (i in 1:replicas) {
+                mu_bnp[i]<-mean(sample(datos,size=length(datos),replace = T))
+                
+        }
+        mu_bnp_hat<-mean(mu_bnp)
+        desviacion<-sd(mu_bnp)
+        alpha<-1-confianza
+        vecpivotal<-c(mu_bnp-mu_bnp_hat)
+        piv<-c(mu_hat-quantile(vecpivotal,1-alpha),
+               mu_hat-quantile(vecpivotal,alpha))
+        per<-quantile(mu_bnp,probs = c(alpha/2,1-alpha/2))
+        nor<-mean(datos)+c(-qnorm((alpha)/2,lower.tail = F)*desviacion,
+                           qnorm((alpha)/2,lower.tail = F)*desviacion)
+        ampN<-nor[2]-nor[1]
+        ampPiv<-piv[2]-piv[1]
+        ampPer<-per[2]-piv[1]
+        resultados<-list(Estadistico = mean(datos),Estimacion = mu_bnp_hat,
+                         Sd_hat_bnp = desviacion ,
+                         min_max = range(mu_bnp),
+                         Int.Normal = nor,
+                         Amplitud.Normal =ampN,
+                         Int.Pivotal=piv,
+                         Amplitud.Pivotal =ampPiv,
+                         Int.Percentil = per,
+                         Amplitud.Percentil =ampPer)
+        hist(mu_bnp,freq = F,col = mis.colores(14),main = "Bootstrap No Parametrico",
+             xlab = "mu_hat", border = mis.colores(14),lty="blank")
+        rug(mean(datos), lwd = 2)
+        rug(mu_bnp_hat, lwd = 2, col = "blue")
+        abline(v = 2.5, lty = 2, col = "black", lwd = 2)
+        abline(v = per[1],lty = 2, col = "Purple", lwd = 2)
+        abline(v = per[2],lty = 2, col = "Purple", lwd = 2)
+        abline(v = nor[1],lty = 2, col = "Tomato", lwd = 2)
+        abline(v = nor[2],lty = 2, col = "Tomato", lwd = 2)
+        abline(v = piv[1],lty = 2, col = "dodgerblue3", lwd = 2)
+        abline(v = piv[2],lty = 2, col = "dodgerblue3", lwd = 2)
+        lines(density(mu_bnp),lwd=3,col="blue")
+        legend(min(mu_bnp)-.025,3,col = c("Tomato","dodgerblue3","Purple",
+                           "Black"),legend = c("Int.Normal","Int.Pivotal",
+                          "Int.Percelil","Mu real"),lty =2,lwd = 2, cex=0.7)
+        return(resultados)
+}
+BNoparametrico<-Bootnoparametrico(muestra)
+Jackknife<-function(datos,confianza=.90){
+        set.seed(432)
+        n<-length(datos)
+        mu_j<-vector()
+        for(i in 1:n){
+                mu_j[i]<-mean(datos[-i])
+        }
+        mu_j_hat<-mean(mu_j)
+        alpha<-1-confianza
+        desviacion<-sqrt(((n-1)/n)*sum((mu_j-mu_j_hat)^2))
+        nor<-mean(datos)+c(-qnorm((alpha)/2,lower.tail = F)*desviacion,
+                           qnorm((alpha)/2,lower.tail = F)*desviacion)
+        ampN<-nor[2]-nor[1]
+        resultados<-list(Estadistico = mean(datos),Estimacion =mu_j_hat,
+                         Sd_hat_jackk = desviacion ,
+                         min_max = range(mu_j) ,
+                         Int.Normal = nor,
+                         Amplitud.Normal = ampN)
+        hist(mu_j,freq = F,col = mis.colores(14),main = "Jackknife",
+             xlab = "mu_j_hat", border = mis.colores(14),lty="blank")
+        rug(mean(datos), lwd = 2)
+        rug(mu_j_hat, lwd = 2, col = "blue")
+        abline(v = 2.5, lty = 2, col = "black", lwd = 2)
+        abline(v = nor[1],lty = 2, col = "Tomato", lwd = 2)
+        abline(v = nor[2],lty = 2, col = "Tomato", lwd = 2)
+        lines(density(mu_j),lwd=3,col="blue")
+        legend(2.39,30,col = c("Tomato","Black"),legend = c("Int.Normal",
+                              "Mu real"),lty =2,lwd = 2, cex=0.7)
+        return(resultados)
+}
+Jackk<-Jackknife(muestra)
+
+```
+En este documento solamente se hará mención de los resultados importantes, si se quiere ver de forma más técnica como se llegaron a los resultados se pueden ver a detalle en el script.
+
+# Ejercicio 1
+
+En el trabajo se observaron unos datos dados, primero se calculó $\hat{\mu}=2.4408852$ después se graficó el histograma, junto con la función de densidad de los datos, la idea de proponer una distribución $\mathcal{N}(\hat{\mu},\sigma(datos))$ fue natural e intuitiva, al ver que esta quedaba por debajo del histograma, se propuso $\mathcal{N}(\hat{\mu},1)$ para aumentar la altura de la gráfica pasada, pero esta sobrepaso al histograma, así que se propuso la distribución$\mathcal{N}(\hat{\mu},1.088665)$ donde $1.088665$ es el promedio de las desviaciones de las distribuciones anteriores, y efectivamente esta distribución ,queda en medio, se puso también la $\mathcal{N}(0,1)$ para referencia, lo anteriormente dicho se puede observar en el siguiente grafico
+```{r}
+graficas_densidades()
+```
+
+Donde el parecido en las distribuciones se ven más es en las gráficas de las distribuciones como se verá a continuación.
+```{r}
+graficas_distribuciones()
+```
+
+Ya que se parecen mucho vamos a hacer la prueba de Anderson-Darling,con un nivel de significancia $\alpha = 0.05$ teniendo los siguientes  resultados de los p-values 
+```{r}
+prueba()
+```
+
+Vemos que ninguna distribución rechazamos pero la que tiene mayor p-values es la distribución $\mathcal{N}(\hat{\mu},1.088665)$. Veamos cómo se ven los gráficos las distribución elegida 
+```{r}
+hist(muestra,freq = F,col = mis.colores(14),xlab = "Muestra observada")
+curve(dnorm(x,mu_hat,sum(sd(muestra),1)/2),col="Red",add = T,lwd = 3)
+lines(density(muestra),lwd=3,col="blue")
+legend(max(muestra)-3.5,0.35,
+c("Distribucion de la muestra","Distribucion elegida"),col =c("Blue","Red"),lty=1,lwd=2)
+```
+
+Ahora la gráfica de la distribución
+
+```{r}
+curve(f_gorro(x),col="Blue",-5,5,lwd=3)
+curve(pnorm(x,mu_hat,sum(sd(muestra),1)/2),col="Red",add = T,lwd = 3)
+legend(min(muestra)-6,1,
+c("Distribucion de la muestra","Distribucion elegida"),col =c("Blue","Red"),lty=1,lwd=2)
+```
+
+# Ejercicio 2
+
+Para este ejercicio se programaron las funciones para hacer las funciones correspondientes para hacer los remuestreos. A continuación, se pondrá los resultados obtenidos por cada método
+
+### Bootstrap paramétrico
+
+```{r}
+Bootparametrico(muestra)
+```
+
+La línea inferior azul es la estimación del remuestreo y la línea negra inferior es $\hat{\mu}$. Veamos que la linea negra es la distribucion propuesta.
+
+### Bootstrap no paramétrico
+
+```{r}
+Bootnoparametrico(muestra)
+```
+
+La línea inferior azul es la estimación del remuestreo y la línea negra inferior es $\hat{\mu}$ .
+
+### Jackknife
+
+```{r}
+Jackknife(muestra)
+```
+
+A diferencia de los otros el histograma queda diferente ya que se siguen teniendo pocas muestras a comparación con los Bootstrap, es mas en el histograma no se alcanza a ver el valor real de $\mu$ veamos si esto afecta en algo a en los intervalos del ejercicio 3.   
+
+# Ejercicio 3
+A continuación podremos los intervalos para ver la hipótesis $$H_0:\mu=2.5  \ \ \mbox{vs} \ \ H_1:\mu \not =2.5$$
+
+## Intervalo Normal
+
+En los siguientes intervalos se toma $90\%$ de confianza
+
+### Bootstrap paramétrico
+
+```{r}
+Parametrico$Int.Normal
+Parametrico$Amplitud.Normal
+```
+
+Podemos ver qué $\mu_o$ cae dentro del intervalo, esto también lo vemos gráficamente, así que no recházanos $H_0$, ademas vemos que la longitud del intervalo es de $0.3642486$
+
+### Bootstrap no paramétrico
+
+```{r}
+BNoparametrico$Int.Normal
+BNoparametrico$Amplitud.Normal
+```
+
+Podemos ver qué $\mu_o$ cae dentro del intervalo, esto se logra ver en el gráfico, así que no recházanos $H_0$, además la longitud del intervalo es de $0.3895$
+
+### Jackknife
+
+```{r}
+Jackk$Int.Normal
+Jackk$Amplitud.Normal
+```
+
+Vemos que a pesar que en el histograma no veíamos al valor real de $\mu$ y los intervalos como en los otros gráficos , $\mu_o$ cae dentro del intervalo así que no recházanos $H_0$ y la longitud del intervalo es de 
+$0.3873069$.
+Vemos que el que tiene mayor longitud de intervalo es el de Bootstrap no paramétrico.
+
+## Intervalo Pivotal
+
+```{r}
+BNoparametrico$Int.Pivotal
+BNoparametrico$Amplitud.Pivotal
+```
+Podemos ver qué $\mu_o$ cae dentro del intervalo, esto también se observa gráficamente, así que no recházanos $H_0$, además la longitud del intervalo es de $0.3019016 $
+
+## Intervalo Percentil
+
+```{r}
+BNoparametrico$Int.Percentil
+BNoparametrico$Amplitud.Percentil
+```
+Podemos ver qué $\mu_o$ cae dentro del intervalo, esto se puede ver gráficamente, así que no recházanos $H_0$
+
+Podemos ver que para Bootstrap el intervalo pivotal es el más pequeño y además no se rechaza la hipótesis, así que preferimos este intervalo.
+Tambien podemos concluir que Bootstrap parametrico fue la que estimo la menor desviación estándar ( $0.1107237$)
